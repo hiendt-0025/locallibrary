@@ -1,7 +1,14 @@
-from django.shortcuts import render
+import datetime
+
+from django.contrib.auth.decorators import permission_required
+from django.shortcuts import render, get_object_or_404
+from django.http import HttpResponseRedirect
+from django.urls import reverse, reverse_lazy
 from catalog.models import Book, Author, BookInstance, Genre, Language
+from catalog.forms import RenewBookModelForm
 from django.views import generic
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
+from django.views.generic.edit import CreateView, UpdateView, DeleteView
 
 def index(request):
   num_books = Book.objects.all().count()
@@ -68,3 +75,42 @@ class AllLoanedBooksByUserListView(LoginRequiredMixin,PermissionRequiredMixin, g
   def get_queryset(self):
     return BookInstance.objects.filter(status__exact='o').order_by('due_back')
 
+@permission_required('catalog.can_mark_returned')
+def renew_book_librarian(request, pk):
+  book_instance = get_object_or_404(BookInstance, pk = pk)
+  if request.method == 'POST':
+    form = RenewBookModelForm(request.POST)
+    if form.is_valid():
+      book_instance.due_back = form.cleaned_data['due_back']
+      book_instance.save()
+      return HttpResponseRedirect(reverse('all-borrowed'))
+  else:
+    proposed_renewal_date = datetime.date.today() + datetime.timedelta(weeks =3)
+    form = RenewBookModelForm(initial ={'due_back': proposed_renewal_date})
+
+  context = {
+    'form': form,
+    'book_instance': book_instance,
+  }
+  return render(request, 'catalog/book_renew_librarian.html', context)
+
+class AuthorCreate(CreateView):
+  """docstring for AuthorCreate"""
+  model = Author
+  fields = '__all__'
+  initial={'date_of_death': '05/01/2018'}
+
+class AuthorUpdate(UpdateView):
+  """docstring for AuthorUpdate"""
+  model = Author
+  fields = ['first_name', 'last_name', 'date_of_birth', 'date_of_death']
+
+class AuthorDelete(DeleteView):
+  """docstring for AuthorDelete"""
+  model = Author
+  success_url = reverse_lazy('authors')
+
+class BookCreate(CreateView):
+  """docstring for BookCreate"""
+  model = Book
+  fields = '__all__'
